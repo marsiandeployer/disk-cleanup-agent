@@ -51,4 +51,4 @@ jobs:
             dist/disk-cleanup-agent-linux-x86_64.sha256 \
             --prerelease \
             --title "$GITHUB_REF_NAME (guarded cleanup preview)" \
-            --notes 'Linux x86_64 guarded cleanup preview. Model assessment is advisory; deletion requires explicit configuration and fresh safety checks. The release does not claim autonomous or scheduled cleanup.'
+            --notes 'Linux x86_64 guarded cleanup preview. scan, report and the configured manual-plan path are verified. The local 0.8B model may return invalid plans, which are rejected. Deletion requires explicit configuration and fresh safety checks. Autonomous or scheduled cleanup is not claimed.'
