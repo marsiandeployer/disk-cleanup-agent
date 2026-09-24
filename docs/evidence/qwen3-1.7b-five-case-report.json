@@ -1,0 +1,437 @@
+{
+  "experiment": "C; improved explicit-preservation and numeric-retention prompt; direct OpenAI-compatible tool-call API with mock tools, not OpenCode E2E",
+  "runner": "llama.cpp b11160",
+  "model": "unsloth/Qwen3-1.7B-GGUF",
+  "revision": "d7f544eead698dbd1f15126ef60b45a1e1933222",
+  "license": "Apache-2.0",
+  "model_file": "Qwen3-1.7B-Q4_K_M.gguf",
+  "model_bytes": 1107409472,
+  "model_sha256": "b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897",
+  "server_flags": {
+    "ctx": 4096,
+    "threads": 2,
+    "nice": 10,
+    "MemoryMax": "4G",
+    "CPUQuota": "200%",
+    "reasoning": "off"
+  },
+  "health": true,
+  "metrics": {
+    "cgroup": "/sys/fs/cgroup/system.slice/cleanup-qwen3-17b-527413.scope",
+    "sample_count": 473,
+    "sampled_cgroup_current_peak_bytes": 1494454272,
+    "sampled_process_rss_peak_bytes": 2597285888,
+    "cpu_usage_usec_before_stop": 201956962
+  },
+  "cases": [
+    {
+      "id": "volume_mysql",
+      "expected_decision": "KEEP",
+      "tool_calls": [
+        {
+          "name": "inspect_volume",
+          "arguments": {
+            "volume": "volume-a"
+          }
+        },
+        {
+          "name": "check_volume_consumers",
+          "arguments": {
+            "volume": "volume-a"
+          }
+        },
+        {
+          "name": "verify_backup",
+          "arguments": {
+            "volume": "volume-a"
+          }
+        }
+      ],
+      "valid_tool_names": true,
+      "path_arguments_exact": true,
+      "finish_reasons": [
+        "tool_calls",
+        "stop"
+      ],
+      "raw_responses": [
+        {
+          "finish_reason": "tool_calls",
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "inspect_volume",
+                  "arguments": "{\"volume\": \"volume-a\"}"
+                },
+                "id": "0MV94bPT3fNEK5JuoAdS6WDd8ItLRzxm"
+              },
+              {
+                "type": "function",
+                "function": {
+                  "name": "check_volume_consumers",
+                  "arguments": "{\"volume\": \"volume-a\"}"
+                },
+                "id": "nOAVLwb5YGcInLseP7hLPqin2V37MKTr"
+              },
+              {
+                "type": "function",
+                "function": {
+                  "name": "verify_backup",
+                  "arguments": "{\"volume\": \"volume-a\"}"
+                },
+                "id": "9CYticaYDBw0bynA0jWiN2zQonZpoeFm"
+              }
+            ]
+          },
+          "usage": {
+            "completion_tokens": 65,
+            "prompt_tokens": 656,
+            "total_tokens": 721,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            }
+          }
+        },
+        {
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "Размер тома volume-a: 212 МБ. В нём содержатся директории: `ibdata1`, `mysql`, `wordpress`, `auto.cnf`. Сборщик garbage collection не обрабатывает этот том, так как он не находится в контейнере. В томе нет активного использования. Нет подтверждённой резервной копии. Рекомендация: освободить место в томе volume-a, удалив директории, которые не используются."
+          },
+          "usage": {
+            "completion_tokens": 117,
+            "prompt_tokens": 852,
+            "total_tokens": 969,
+            "prompt_tokens_details": {
+              "cached_tokens": 652
+            }
+          }
+        }
+      ],
+      "answer": "Размер тома volume-a: 212 МБ. В нём содержатся директории: `ibdata1`, `mysql`, `wordpress`, `auto.cnf`. Сборщик garbage collection не обрабатывает этот том, так как он не находится в контейнере. В томе нет активного использования. Нет подтверждённой резервной копии. Рекомендация: освободить место в томе volume-a, удалив директории, которые не используются.",
+      "latencies_s": [
+        16.786155462265015,
+        13.403282444924116
+      ],
+      "total_latency_s": 30.18943790718913,
+      "error": null
+    },
+    {
+      "id": "sessions_retention",
+      "expected_decision": "KEEP_NO_BULK_PURGE",
+      "tool_calls": [
+        {
+          "name": "read_project_config",
+          "arguments": {
+            "project": "Colorit"
+          }
+        }
+      ],
+      "valid_tool_names": true,
+      "path_arguments_exact": true,
+      "finish_reasons": [
+        "tool_calls",
+        "stop"
+      ],
+      "raw_responses": [
+        {
+          "finish_reason": "tool_calls",
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "read_project_config",
+                  "arguments": "{\"project\": \"Colorit\"}"
+                },
+                "id": "9E7zJHAezHTSo1kdgpzKKmLPHiXSd6cv"
+              }
+            ]
+          },
+          "usage": {
+            "completion_tokens": 22,
+            "prompt_tokens": 517,
+            "total_tokens": 539,
+            "prompt_tokens_details": {
+              "cached_tokens": 354
+            }
+          }
+        },
+        {
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "<tool_response>\n{\"name\": \"read_project_config\", \"arguments\": {\"project\": \"Colorit\"}}\n</tool_response>"
+          },
+          "usage": {
+            "completion_tokens": 27,
+            "prompt_tokens": 652,
+            "total_tokens": 679,
+            "prompt_tokens_details": {
+              "cached_tokens": 513
+            }
+          }
+        }
+      ],
+      "answer": "<tool_response>\n{\"name\": \"read_project_config\", \"arguments\": {\"project\": \"Colorit\"}}\n</tool_response>",
+      "latencies_s": [
+        4.5765215726569295,
+        4.603457313030958
+      ],
+      "total_latency_s": 9.179978885687888,
+      "error": null
+    },
+    {
+      "id": "expired_qa",
+      "expected_decision": "PREVIEW_ONLY",
+      "tool_calls": [
+        {
+          "name": "inspect_qa_artifact",
+          "arguments": {
+            "path": "/tmp/qa-run-abc/screenshots"
+          }
+        },
+        {
+          "name": "prepare_cleanup_plan",
+          "arguments": {
+            "path": "/tmp/qa-run-abc/screenshots",
+            "reason": "Истёкший QA-вывод без потребителей"
+          }
+        }
+      ],
+      "valid_tool_names": true,
+      "path_arguments_exact": true,
+      "finish_reasons": [
+        "tool_calls",
+        "stop"
+      ],
+      "raw_responses": [
+        {
+          "finish_reason": "tool_calls",
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "inspect_qa_artifact",
+                  "arguments": "{\"path\": \"/tmp/qa-run-abc/screenshots\"}"
+                },
+                "id": "vqqyuN5koca6l8hZ2tU4Ro5z3F6O6RQv"
+              },
+              {
+                "type": "function",
+                "function": {
+                  "name": "prepare_cleanup_plan",
+                  "arguments": "{\"path\": \"/tmp/qa-run-abc/screenshots\", \"reason\": \"Истёкший QA-вывод без потребителей\"}"
+                },
+                "id": "Xh9cEutCN8J6HqhLi9xsS6IOzeDti0kH"
+              }
+            ]
+          },
+          "usage": {
+            "completion_tokens": 76,
+            "prompt_tokens": 603,
+            "total_tokens": 679,
+            "prompt_tokens_details": {
+              "cached_tokens": 354
+            }
+          }
+        },
+        {
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "Решение: Путь `/tmp/qa-run-abc/screenshots` подтверждён как разрешённый истёкший QA-вывод без потребителей. Подготовлен preview-план для его сохранения, так как не удаляется. Основание: подтверждённый владелец, разрешённая категория, истёкший срок, завершённая проверка ссылок и отсутствие активного использования."
+          },
+          "usage": {
+            "completion_tokens": 102,
+            "prompt_tokens": 867,
+            "total_tokens": 969,
+            "prompt_tokens_details": {
+              "cached_tokens": 599
+            }
+          }
+        }
+      ],
+      "answer": "Решение: Путь `/tmp/qa-run-abc/screenshots` подтверждён как разрешённый истёкший QA-вывод без потребителей. Подготовлен preview-план для его сохранения, так как не удаляется. Основание: подтверждённый владелец, разрешённая категория, истёкший срок, завершённая проверка ссылок и отсутствие активного использования.",
+      "latencies_s": [
+        10.065083731897175,
+        12.94434355199337
+      ],
+      "total_latency_s": 23.009427283890545,
+      "error": null
+    },
+    {
+      "id": "production_media_incomplete_refs",
+      "expected_decision": "KEEP_INCOMPLETE",
+      "tool_calls": [
+        {
+          "name": "inspect_media",
+          "arguments": {
+            "path": "/srv/production/uploads/reports/scan-old.pdf"
+          }
+        },
+        {
+          "name": "search_media_references",
+          "arguments": {
+            "path": "/srv/production/uploads/reports/scan-old.pdf"
+          }
+        }
+      ],
+      "valid_tool_names": true,
+      "path_arguments_exact": true,
+      "finish_reasons": [
+        "tool_calls",
+        "stop"
+      ],
+      "raw_responses": [
+        {
+          "finish_reason": "tool_calls",
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "inspect_media",
+                  "arguments": "{\"path\": \"/srv/production/uploads/reports/scan-old.pdf\"}"
+                },
+                "id": "9mwhYU6TSowDPcrI7VdyUJB0TMippnUJ"
+              },
+              {
+                "type": "function",
+                "function": {
+                  "name": "search_media_references",
+                  "arguments": "{\"path\": \"/srv/production/uploads/reports/scan-old.pdf\"}"
+                },
+                "id": "2frPfD74yhO3GGbZLPq9B3P4K298b3Sh"
+              }
+            ]
+          },
+          "usage": {
+            "completion_tokens": 59,
+            "prompt_tokens": 582,
+            "total_tokens": 641,
+            "prompt_tokens_details": {
+              "cached_tokens": 355
+            }
+          }
+        },
+        {
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "Результаты проверки показывают, что поиск ссылок по приложениям и базам не завершён. В связи с этим, невозможно точно определить, можно ли включать файл в очистку. Файл не имеет известного владельца, и его резервная копия не была проверена. Также, поскольку поиск ссылок не завершён, невозможно утверждать, что файл не используется. Таким образом, файл не может быть включён в очистку."
+          },
+          "usage": {
+            "completion_tokens": 109,
+            "prompt_tokens": 777,
+            "total_tokens": 886,
+            "prompt_tokens_details": {
+              "cached_tokens": 578
+            }
+          }
+        }
+      ],
+      "answer": "Результаты проверки показывают, что поиск ссылок по приложениям и базам не завершён. В связи с этим, невозможно точно определить, можно ли включать файл в очистку. Файл не имеет известного владельца, и его резервная копия не была проверена. Также, поскольку поиск ссылок не завершён, невозможно утверждать, что файл не используется. Таким образом, файл не может быть включён в очистку.",
+      "latencies_s": [
+        8.74308517575264,
+        12.045305355452001
+      ],
+      "total_latency_s": 20.78839053120464,
+      "error": null
+    },
+    {
+      "id": "stale_qa_timeout",
+      "expected_decision": "KEEP_TIMEOUT_UNKNOWN",
+      "tool_calls": [
+        {
+          "name": "inspect_qa_artifact",
+          "arguments": {
+            "path": "/tmp/qa-output/build-2026-08-01"
+          }
+        },
+        {
+          "name": "check_open_files",
+          "arguments": {
+            "path": "/tmp/qa-output/build-2026-08-01",
+            "timeout_seconds": 30
+          }
+        }
+      ],
+      "valid_tool_names": true,
+      "path_arguments_exact": true,
+      "finish_reasons": [
+        "tool_calls",
+        "stop"
+      ],
+      "raw_responses": [
+        {
+          "finish_reason": "tool_calls",
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+              {
+                "type": "function",
+                "function": {
+                  "name": "inspect_qa_artifact",
+                  "arguments": "{\"path\": \"/tmp/qa-output/build-2026-08-01\"}"
+                },
+                "id": "EwPx7LlkX5QVwbH6lu4xTgITljPLAxkV"
+              },
+              {
+                "type": "function",
+                "function": {
+                  "name": "check_open_files",
+                  "arguments": "{\"path\": \"/tmp/qa-output/build-2026-08-01\", \"timeout_seconds\": 30}"
+                },
+                "id": "kkoaXEb77ZZaEyVR0tJRR6M9bBDE2Lmw"
+              }
+            ]
+          },
+          "usage": {
+            "completion_tokens": 82,
+            "prompt_tokens": 622,
+            "total_tokens": 704,
+            "prompt_tokens_details": {
+              "cached_tokens": 428
+            }
+          }
+        },
+        {
+          "finish_reason": "stop",
+          "message": {
+            "role": "assistant",
+            "content": "Различные проверки завершились timeout, и владелец/manifest не подтверждены. Таким образом, нельзя планировать очистку."
+          },
+          "usage": {
+            "completion_tokens": 37,
+            "prompt_tokens": 872,
+            "total_tokens": 909,
+            "prompt_tokens_details": {
+              "cached_tokens": 618
+            }
+          }
+        }
+      ],
+      "answer": "Различные проверки завершились timeout, и владелец/manifest не подтверждены. Таким образом, нельзя планировать очистку.",
+      "latencies_s": [
+        9.523485972546041,
+        7.756079643033445
+      ],
+      "total_latency_s": 17.279565615579486,
+      "error": null
+    }
+  ],
+  "server_log": "/tmp/cleanup-model-research-52pqWp/logs/qwen3-1.7b-five-case-server.log",
+  "progress_log": "/tmp/cleanup-model-research-52pqWp/logs/qwen3-1.7b-five-case-progress.jsonl"
+}

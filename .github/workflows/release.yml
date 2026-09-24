@@ -1,0 +1,54 @@
+name: Build and publish Linux release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-linux-x86_64:
+    name: Build Linux x86_64 preview bundle
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up pinned Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.1
+          cache: false
+      - name: Build, verify and smoke-test release bundle
+        run: |
+          sh -n scripts/install.sh scripts/build-release.sh scripts/make-onefile.sh scripts/asset-pins.sh scripts/smoke-docker.sh
+          python3 -m unittest discover -s tests -v
+          (cd packaging/launcher && go test ./...)
+          sh scripts/build-release.sh
+      - name: Verify the release asset in Ubuntu Docker
+        run: sh scripts/smoke-docker.sh dist/disk-cleanup-agent-linux-x86_64
+      - name: Verify release checksum file
+        run: |
+          cd dist
+          sha256sum -c disk-cleanup-agent-linux-x86_64.sha256
+          test "$(stat -c %s disk-cleanup-agent-linux-x86_64)" -lt 2147483648
+      - name: Publish preview release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/disk-cleanup-agent-linux-x86_64 \
+            dist/disk-cleanup-agent-linux-x86_64.sha256 \
+            --prerelease \
+            --title "$GITHUB_REF_NAME (guarded cleanup preview)" \
+            --notes 'Linux x86_64 guarded cleanup preview. Model assessment is advisory; deletion requires explicit configuration and fresh safety checks. The release does not claim autonomous or scheduled cleanup.'

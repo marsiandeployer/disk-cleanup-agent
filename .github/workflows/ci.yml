@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-linux-x86_64:
+    name: Tests and packaging fixture (Linux x86_64)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up pinned Go toolchain
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.1
+          cache: false
+      - name: Check shell syntax
+        run: sh -n scripts/install.sh scripts/build-release.sh scripts/make-onefile.sh scripts/asset-pins.sh scripts/smoke-docker.sh
+      - name: Run launcher unit tests
+        working-directory: packaging/launcher
+        run: go test ./...
+      - name: Run Python tests and one-file fixture tests
+        run: python3 -m unittest discover -s tests -v

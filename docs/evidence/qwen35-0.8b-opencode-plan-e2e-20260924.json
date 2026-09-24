@@ -1,0 +1,40 @@
+{
+  "experiment": "rootless local OpenCode plan with bounded preinspection",
+  "date": "2026-09-24",
+  "model": "Qwen3.5-0.8B Q4_K_M",
+  "runner": "OpenCode 1.14.21 + llama.cpp b11160",
+  "execution": {
+    "uid": "nobody",
+    "transport": "numeric loopback only",
+    "threads": 2,
+    "context_size": 8192,
+    "timeout_seconds": 180,
+    "candidate_count": 2,
+    "preinspected_candidates": 2,
+    "prompt_characters": 4959,
+    "candidate_inspection_statuses": ["unknown", "unknown"],
+    "core_proc_unknown_count_per_candidate": 538
+  },
+  "result": {
+    "elapsed_seconds_approx": 118,
+    "exit_code": 1,
+    "plan_written": false,
+    "assessment": "failed_strict_schema_validation",
+    "reason": "Model text omitted required top-level inspect_refs and limitations arrays and cited evidence IDs not present in the request.",
+    "model_text": "{\"items\":[{\"ref\":\"C-0aee36e6770501af\",\"assessment\":\"unknown\",\"reason\":\"evidence incomplete\",\"evidence_refs\":[\"E-22b33611c5d2b979\"]},{\"ref\":\"C-3d63ba054e4c01ad\",\"assessment\":\"unknown\",\"reason\":\"evidence incomplete\",\"evidence_refs\":[\"E-e15073ee2f32a7e2\"]}]}"
+  },
+  "sampled_process_rss_bytes": {
+    "llama_server": 1211097088,
+    "opencode": 381251584,
+    "python_cli": 21315584,
+    "sum_approx": 1579680256,
+    "note": "Selected samples, not a cgroup or host peak."
+  },
+  "safety": {
+    "deletion_performed": false,
+    "fallback_used": false,
+    "children_remaining": false,
+    "child_registry_removed": true,
+    "runtime_transport_schema_note": "Pinned OpenCode fake-endpoint test proves response_format is forwarded. The actual llama HTTP request body was not captured; end-to-end schema conformance failed as shown above."
+  }
+}
