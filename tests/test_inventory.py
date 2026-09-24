@@ -53,7 +53,9 @@ class InventoryTests(unittest.TestCase):
                                  "inspect_candidates": 0})
             files = [item for item in result["candidates"] if item["kind"] == "file"]
             self.assertEqual(len(files), 1)
-            self.assertEqual(files[0]["hardlink_paths"], [str(second)])
+            self.assertEqual({files[0]["path"], *files[0]["hardlink_paths"]},
+                             {str(first), str(second)})
+            self.assertEqual(len(files[0]["hardlink_paths"]), 1)
             self.assertEqual(result["totals"]["allocated_bytes"],
                              os.stat(root).st_blocks * 512 + os.stat(first).st_blocks * 512)
 

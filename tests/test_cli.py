@@ -418,7 +418,7 @@ class CliTests(unittest.TestCase):
                 cli.command_apply(args)
             fresh_scan.assert_not_called()
 
-    def test_scan_manual_plan_apply_e2e_only_removes_temporary_fixture(self) -> None:
+    def test_scan_manual_plan_apply_e2e_respects_process_visibility(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cleanup-agent-qa-") as temp:
             root = Path(temp)
             candidate_path = root / "qa-old-run-fixture.bin"
@@ -457,9 +457,17 @@ class CliTests(unittest.TestCase):
                                        output=str(result_path), overwrite=False)
                 result = cli.command_apply(apply_args)
                 payload = json.loads(result_path.read_text())
-                self.assertEqual(result, 0, payload)
-                self.assertEqual(payload["deleted_count"], 1)
-                self.assertFalse(candidate_path.exists())
+                if result == 0:
+                    self.assertEqual(payload["deleted_count"], 1)
+                    self.assertFalse(candidate_path.exists())
+                else:
+                    # CI may not see other users' /proc entries. The real
+                    # safety guard must preserve the fixture in that case.
+                    self.assertEqual(result, 2, payload)
+                    self.assertEqual(payload["deleted_count"], 0)
+                    self.assertTrue(candidate_path.exists())
+                    self.assertEqual(payload["results"][0]["reason"], "safety_recheck_failed")
+                    self.assertTrue(payload["results"][0]["evidence"]["core_unknown"])
 
 
 if __name__ == "__main__":
