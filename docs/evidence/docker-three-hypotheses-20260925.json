@@ -1,0 +1,95 @@
+{
+  "format": "disk-cleanup-agent-docker-hypotheses-v1",
+  "run_date_local": "2026-09-25",
+  "release_asset": {
+    "sha256": "9b6acd56ca1ce9d35c1d5276646599b8aacafd06588b605ce0cd4cd7a9efcc84",
+    "bytes": 661315038,
+    "model": "Qwen3.5-0.8B-Q4_K_M",
+    "model_sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+    "opencode": "1.14.21",
+    "llama_cpp": "b11160"
+  },
+  "hypotheses": [
+    {
+      "name": "rootless_offline_onefile_on_real_host_tree",
+      "result": "passed",
+      "environment": {
+        "image": "ubuntu:22.04",
+        "image_manifest_digest": "sha256:b8b6ee6aa931ecd9d0d952abc34dc0e5f7c6a30c6bb71b079fe399fde0329c02",
+        "uid": 65534,
+        "memory_limit_bytes": 8589934592,
+        "cpu_limit": 2,
+        "network": "none",
+        "host_root_mount": "read-only",
+        "docker_socket_mounted": false
+      },
+      "observed": {
+        "doctor": "passed",
+        "fixture_scan_report_manual_plan": "passed",
+        "bounded_host_root_scan": "passed",
+        "host_root_scan_max_entries": 100,
+        "scratch_fixtures_unchanged": true,
+        "apply_invoked": false
+      }
+    },
+    {
+      "name": "live_host_scan_reports_engine_usage_separately",
+      "result": "passed_with_explicit_unknowns",
+      "scan_status": "complete",
+      "scan_entries": 247,
+      "docker_api_version": "1.52",
+      "category_statuses": {
+        "images": "available",
+        "local_volumes": "available",
+        "containers": "unknown",
+        "build_cache": "unknown"
+      },
+      "report_backup_recommendation_present": true,
+      "report_deletion_performed": false,
+      "no_combined_docker_total_emitted": true
+    },
+    {
+      "name": "bundled_opencode_model_returns_a_usable_plan_in_8gib_docker",
+      "result": "failed",
+      "environment": {
+        "image": "ubuntu:22.04",
+        "memory_limit_bytes": 8589934592,
+        "cpu_limit": 2,
+        "network": "none",
+        "uid": 65534,
+        "runtime": "opencode",
+        "schema_shape": "object",
+        "share_name_hints": true,
+        "preinspect_candidates": 0,
+        "total_timeout_seconds": 180,
+        "request_timeout_seconds": 90
+      },
+            "input": {
+                "fixture": "65 MiB allocated QA-named file, 45 days old, created inside disposable container filesystem",
+                "scan_status": "complete",
+                "scan_sha256": "34f3ea2946412fcfb9627b508309bc8bb8a45ed2a9fb758be14914d207be2719",
+                "candidate_count": 1,
+        "candidate_ref": "C-07df9e38581f205f",
+        "evidence_status": "not_checked",
+        "candidate_unknown": true,
+        "sanitized_name_hints": {
+          "basename": "qa-old-run-artifact.bin",
+          "parent_label": "qa-old-run"
+        }
+      },
+      "outcome": {
+        "exit_code": 1,
+        "plan_written": false,
+        "stderr": "error: model response has an unexpected schema; no plan was written",
+        "raw_model_response_retained": false,
+        "apply_invoked": false
+      },
+      "resources": {
+        "post_run_cgroup_memory_current_bytes": 1066389504,
+        "cgroup_memory_peak_available": false,
+        "oom_kill_count": 0,
+        "runtime_cache_kib_before_container_removal": 965736
+      }
+    }
+  ]
+}

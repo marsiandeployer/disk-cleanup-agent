@@ -208,6 +208,87 @@ class SelfExtractingReleaseTests(unittest.TestCase):
 
 
 class SourceInstallerInterfaceTests(unittest.TestCase):
+    def test_source_version_upgrade_keeps_current_and_one_rollback(self) -> None:
+        helper = ROOT / "scripts/source-version-retention.sh"
+        with tempfile.TemporaryDirectory(prefix="dca source retention ") as temporary:
+            prefix = pathlib.Path(temporary)
+            versions = prefix / "versions"
+            versions.mkdir()
+            for name in ("source-current", "source-previous", "source-old", "source-new", "custom-data"):
+                path = versions / name
+                path.mkdir()
+                (path / "payload").write_text(name, encoding="utf-8")
+            outside = prefix / "outside"
+            outside.mkdir()
+            (outside / "payload").write_text("preserve", encoding="utf-8")
+            (versions / "source-link").symlink_to(outside, target_is_directory=True)
+            (prefix / "current").symlink_to("versions/source-current")
+            (prefix / "previous").symlink_to("versions/source-previous")
+            script = (
+                f'. "{helper}"; '
+                f'activate_source_version "{prefix}" versions/source-new; '
+                f'prune_source_versions "{prefix}"; '
+                f'activate_source_version "{prefix}" versions/source-new; '
+                f'prune_source_versions "{prefix}"'
+            )
+            result = subprocess.run(["sh", "-c", script], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(os.readlink(prefix / "current"), "versions/source-new")
+            self.assertEqual(os.readlink(prefix / "previous"), "versions/source-current")
+            self.assertTrue((versions / "source-new/payload").exists())
+            self.assertTrue((versions / "source-current/payload").exists())
+            self.assertFalse((versions / "source-previous").exists())
+            self.assertFalse((versions / "source-old").exists())
+            self.assertTrue((versions / "custom-data/payload").exists())
+            self.assertTrue((versions / "source-link").is_symlink())
+            self.assertEqual((outside / "payload").read_text(encoding="utf-8"), "preserve")
+
+    def test_source_version_pruning_keeps_an_older_live_executable(self) -> None:
+        helper = ROOT / "scripts/source-version-retention.sh"
+        with tempfile.TemporaryDirectory(prefix="dca source live version ") as temporary:
+            prefix = pathlib.Path(temporary)
+            versions = prefix / "versions"
+            for name in ("source-current", "source-previous", "source-live", "source-old"):
+                executable_dir = versions / name / "bin"
+                executable_dir.mkdir(parents=True)
+                (executable_dir / "opencode").write_text("fixture", encoding="utf-8")
+            (prefix / "current").symlink_to("versions/source-current")
+            (prefix / "previous").symlink_to("versions/source-previous")
+            proc_root = prefix / "proc"
+            (proc_root / "self").mkdir(parents=True)
+            (proc_root / "101").mkdir()
+            (proc_root / "self/exe").symlink_to("/bin/sh")
+            live_executable = versions / "source-live/bin/opencode"
+            (proc_root / "101/exe").symlink_to(live_executable)
+            script = f'. "{helper}"; prune_source_versions "{prefix}" "{proc_root}"'
+            result = subprocess.run(["sh", "-c", script], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue((versions / "source-live").exists())
+            self.assertFalse((versions / "source-old").exists())
+
+            (proc_root / "101/exe").unlink()
+            result = subprocess.run(["sh", "-c", script], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((versions / "source-live").exists())
+
+    def test_source_version_pruning_preserves_old_versions_without_proc(self) -> None:
+        helper = ROOT / "scripts/source-version-retention.sh"
+        with tempfile.TemporaryDirectory(prefix="dca source missing proc ") as temporary:
+            prefix = pathlib.Path(temporary)
+            versions = prefix / "versions"
+            for name in ("source-current", "source-previous", "source-old"):
+                path = versions / name
+                path.mkdir(parents=True)
+                (path / "payload").write_text(name, encoding="utf-8")
+            (prefix / "current").symlink_to("versions/source-current")
+            (prefix / "previous").symlink_to("versions/source-previous")
+            absent_proc = prefix / "proc-unavailable"
+            script = f'. "{helper}"; prune_source_versions "{prefix}" "{absent_proc}"'
+            result = subprocess.run(["sh", "-c", script], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("process visibility unavailable", result.stderr)
+            self.assertTrue((versions / "source-old/payload").exists())
+
     def test_help_is_offline_and_describes_user_prefix(self) -> None:
         result = subprocess.run(
             ["sh", str(ROOT / "scripts/install.sh"), "--help"],
@@ -233,3 +314,83 @@ class SourceInstallerInterfaceTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("set HOME or DISKCLEANUP_PREFIX", result.stderr)
+
+    def test_source_installer_does_not_enter_a_locked_prefix(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="dca install lock ") as temporary:
+            prefix = pathlib.Path(temporary) / "prefix"
+            (prefix / "versions").mkdir(parents=True)
+            (prefix / "bin").mkdir()
+            (prefix / ".install-lock").mkdir()
+            result = subprocess.run(
+                ["sh", str(ROOT / "scripts/install.sh"), "--prefix", str(prefix)],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("another install is running", result.stderr)
+            self.assertTrue((prefix / ".install-lock").is_dir())
+
+
+class CompatibilitySmokeInterfaceTests(unittest.TestCase):
+    def test_script_parses_and_requires_a_release_asset(self) -> None:
+        script = ROOT / "scripts/compat-smoke.sh"
+        syntax = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True, timeout=5)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        usage = subprocess.run(["bash", str(script)], capture_output=True, text=True, timeout=5)
+        self.assertEqual(usage.returncode, 1)
+        self.assertIn("PATH_TO_RELEASE_ASSET", usage.stderr)
+
+    def test_smoke_refuses_default_context_before_invoking_docker(self) -> None:
+        script = ROOT / "scripts/compat-smoke.sh"
+        with tempfile.TemporaryDirectory(prefix="dca compat guard ") as temporary:
+            root = pathlib.Path(temporary)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            marker = root / "docker-called"
+            docker = fake_bin / "docker"
+            docker.write_text(f"#!/bin/sh\ntouch '{marker}'\n", encoding="utf-8")
+            docker.chmod(0o755)
+            result = subprocess.run(
+                ["bash", str(script), "--context", "default", "--confirm-daemon-id", "dummy", "--dry-run", "/missing/asset"],
+                env={**os.environ, "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", "")},
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("refusing Docker default context", result.stderr)
+        self.assertFalse(marker.exists())
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker CLI is required to check no-daemon reporting")
+    def test_source_scan_report_keep_docker_storage_unknown_without_socket(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="dca no docker socket ", dir="/tmp") as temporary:
+            root = pathlib.Path(temporary)
+            scan_root = root / "scan root"
+            scan_root.mkdir()
+            (scan_root / "fixture.txt").write_text("qa fixture\n", encoding="utf-8")
+            env = dict(os.environ)
+            env.pop("DOCKER_CONTEXT", None)
+            env["DOCKER_HOST"] = f"unix://{root}/missing.sock"
+            scan = subprocess.run(
+                ["python3", "-m", "cleanup_agent.cli", "scan", str(scan_root), "--output", str(root / "scan.json"), "--max-entries", "20"],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            report = subprocess.run(
+                ["python3", "-m", "cleanup_agent.cli", "report", str(root / "scan.json")],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            self.assertEqual(report.returncode, 0, report.stderr)
+            data = json.loads(report.stdout)
+            self.assertEqual(data["storage"]["docker"]["status"], "unknown")
+            self.assertFalse(data["deletion_performed"])

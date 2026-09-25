@@ -126,7 +126,7 @@
         {
           "name": "read_project_config",
           "arguments": {
-            "project": "Colorit"
+            "project": "ExampleProject"
           }
         }
       ],
@@ -147,7 +147,7 @@
                 "type": "function",
                 "function": {
                   "name": "read_project_config",
-                  "arguments": "{\"project\": \"Colorit\"}"
+                  "arguments": "{\"project\": \"ExampleProject\"}"
                 },
                 "id": "9E7zJHAezHTSo1kdgpzKKmLPHiXSd6cv"
               }
@@ -166,7 +166,7 @@
           "finish_reason": "stop",
           "message": {
             "role": "assistant",
-            "content": "<tool_response>\n{\"name\": \"read_project_config\", \"arguments\": {\"project\": \"Colorit\"}}\n</tool_response>"
+            "content": "<tool_response>\n{\"name\": \"read_project_config\", \"arguments\": {\"project\": \"ExampleProject\"}}\n</tool_response>"
           },
           "usage": {
             "completion_tokens": 27,
@@ -178,7 +178,7 @@
           }
         }
       ],
-      "answer": "<tool_response>\n{\"name\": \"read_project_config\", \"arguments\": {\"project\": \"Colorit\"}}\n</tool_response>",
+      "answer": "<tool_response>\n{\"name\": \"read_project_config\", \"arguments\": {\"project\": \"ExampleProject\"}}\n</tool_response>",
       "latencies_s": [
         4.5765215726569295,
         4.603457313030958

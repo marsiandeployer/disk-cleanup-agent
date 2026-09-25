@@ -1,0 +1,45 @@
+{
+  "observed_at": "2026-09-25T00:16:48Z",
+  "purpose": "End-to-end read-only Docker storage adapter check with a temporary verified Buildx CLI; no model call, apply, or Engine mutation.",
+  "context": "default",
+  "engine_version": "29.1.3",
+  "api_version": "1.52",
+  "temporary_buildx": {
+    "version": "0.37.1",
+    "sha256_verified": "9447199cdb435f25880548343c128a4b6650e8891ee598905d8d29d39a8e359b",
+    "system_install": false,
+    "scratch_removed": true
+  },
+  "adapter_result": {
+    "status": "unknown",
+    "additivity": "non_additive",
+    "categories": {
+      "images": {
+        "status": "available",
+        "item_count": 10,
+        "engine_reported_size_bytes": 4205825064,
+        "unknown_count": 0
+      },
+      "containers": {
+        "status": "unknown",
+        "item_count": 13,
+        "engine_reported_size_bytes": 179291591,
+        "unknown_count": 2
+      },
+      "local_volumes": {
+        "status": "available",
+        "item_count": 6,
+        "engine_reported_size_bytes": 3791086163,
+        "unknown_count": 0
+      },
+      "build_cache": {
+        "status": "available",
+        "item_count": 0,
+        "source": "docker buildx du"
+      }
+    }
+  },
+  "model_inference": false,
+  "filesystem_apply": false,
+  "docker_mutation": false
+}

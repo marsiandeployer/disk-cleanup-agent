@@ -52,11 +52,28 @@ python3 -c 'import sys; assert sys.version_info >= (3,10)' 2>/dev/null || die 'P
 
 mkdir -p "$PREFIX/versions" "$PREFIX/bin"
 chmod 700 "$PREFIX" "$PREFIX/versions"
+# Serialize installs into one prefix so a concurrent upgrade cannot prune the
+# version another installer just activated.
+LOCK_DIR=$PREFIX/.install-lock
+mkdir "$LOCK_DIR" 2>/dev/null || die "another install is running, or a stale lock exists at $LOCK_DIR; inspect it before retrying"
+STAGE=
+cleanup() {
+  [ -z "$STAGE" ] || rm -rf -- "$STAGE"
+  rmdir -- "$LOCK_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+chmod 700 "$LOCK_DIR"
+# shellcheck disable=SC1091
+. "$SCRIPT_DIR/source-version-retention.sh"
 
 SOURCE_HASH=$(
   cd "$REPO_ROOT"
   find cleanup_agent -type f -name '*.py' -print | LC_ALL=C sort | while IFS= read -r f; do sha256sum "$f"; done
-  sha256sum "$SCRIPT_DIR/asset-pins.sh" "$SCRIPT_DIR/install.sh"
+  sha256sum "$SCRIPT_DIR/asset-pins.sh" "$SCRIPT_DIR/install.sh" \
+    "$SCRIPT_DIR/source-version-retention.sh"
 ) || die 'could not fingerprint the source tree'
 INSTALL_ID=$(printf '%s\n' "$SOURCE_HASH" | sha256sum | cut -c1-16)
 VERSION_ID="source-$INSTALL_ID"
@@ -81,17 +98,15 @@ EOF
 }
 
 if [ -f "$FINAL/.install-complete" ]; then
-  ln -sfn "versions/$VERSION_ID" "$PREFIX/.current.$$"
-  mv -Tf "$PREFIX/.current.$$" "$PREFIX/current"
+  activate_source_version "$PREFIX" "versions/$VERSION_ID"
   install_wrapper
+  prune_source_versions "$PREFIX"
   printf 'Installed disk-cleanup-agent at %s\n' "$PREFIX/bin/disk-cleanup-agent"
   exit 0
 fi
 [ ! -e "$FINAL" ] || die "incomplete install exists at $FINAL; preserve it and choose a new prefix or remove it manually"
 
 STAGE=$(mktemp -d "$PREFIX/versions/.stage.XXXXXX") || die 'cannot create staging directory'
-cleanup() { rm -rf "$STAGE"; }
-trap cleanup EXIT HUP INT TERM
 mkdir -p "$STAGE/app/cleanup_agent" "$STAGE/opencode/bin" "$STAGE/llama" "$STAGE/model" "$STAGE/licenses"
 cp "$REPO_ROOT"/cleanup_agent/*.py "$STAGE/app/cleanup_agent/"
 
@@ -175,10 +190,10 @@ EOF
 printf '%s\n' "$INSTALL_ID" >"$STAGE/.install-complete"
 chmod -R go-rwx "$STAGE"
 mv "$STAGE" "$FINAL"
-trap - EXIT HUP INT TERM
+STAGE=
 
-ln -sfn "versions/$VERSION_ID" "$PREFIX/.current.$$"
-mv -Tf "$PREFIX/.current.$$" "$PREFIX/current"
+activate_source_version "$PREFIX" "versions/$VERSION_ID"
 install_wrapper
+prune_source_versions "$PREFIX"
 printf 'Installed disk-cleanup-agent at %s\n' "$PREFIX/bin/disk-cleanup-agent"
 printf 'Add %s/bin to PATH to run it.\n' "$PREFIX"

@@ -1,0 +1,69 @@
+{
+  "format": "disk-cleanup-agent-runtime-ab-v1",
+  "date": "2026-09-24",
+  "purpose": "Compare runtime overhead and fixed-output schema fidelity; not a cleanup-plan quality test.",
+  "environment": {
+    "uid": 0,
+    "network": "isolated network namespace with loopback enabled",
+    "context_size": 4096,
+    "threads": 2,
+    "model_sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+    "llama_cpp": "b11160, commit 70c4e1582e37e4fd94104eb09301711a0f2675bc",
+    "opencode": "1.14.21",
+    "opencode_tar_sha512": "ad03612aa8322abf6ede0dad3ec34b917fc2038229d53700586130933b2a7c2fb007a791a03c4014b8419503c5096169b7e93c48efa03c6d4c899910a4557560",
+    "prompt": "Return exactly {\"message\":\"ready\"}; no extra text.",
+    "response_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string",
+          "enum": [
+            "ready"
+          ]
+        }
+      },
+      "required": [
+        "message"
+      ]
+    }
+  },
+  "measurements": [
+    {
+      "mode": "opencode",
+      "status": "ok",
+      "output": "{\"message\":\"ready\"}",
+      "schema_valid": true,
+      "elapsed_seconds": 32.31,
+      "llama_ready_seconds": 1.72,
+      "post_ready_seconds": 30.59,
+      "sampled_process_tree_peak_rss_mib": 1429.0,
+      "sampled_cpu_seconds": null,
+      "samples": 63,
+      "sampled_cpu_note": "Not measured reliably: this run summed CPU ticks across changing descendants at samples; child process restarts can make that aggregate non-monotonic."
+    },
+    {
+      "mode": "llama",
+      "status": "ok",
+      "output": "{\"message\":\"ready\"}",
+      "schema_valid": true,
+      "elapsed_seconds": 2.27,
+      "llama_ready_seconds": 1.63,
+      "post_ready_seconds": 0.64,
+      "sampled_process_tree_peak_rss_mib": 900.6,
+      "sampled_cpu_seconds": null,
+      "samples": 5,
+      "sampled_cpu_note": "Not measured reliably: this run summed CPU ticks across changing descendants at samples; child process restarts can make that aggregate non-monotonic."
+    }
+  ],
+  "measurement_limits": [
+    "RSS and CPU are approximate /proc descendant-tree samples at 0.5-second intervals, not cgroup peak measurements.",
+    "Run used UID 0 because the shared model directory was root-only; this does not establish rootless compatibility.",
+    "The prompt tests only a tiny fixed JSON response. It does not establish semantic plan quality or whole-host 8-GiB suitability."
+  ],
+  "cleanup": {
+    "owned_child_processes_remaining": false,
+    "runtime_registry_remaining": false,
+    "production_data_accessed": false
+  }
+}

@@ -30,7 +30,7 @@ jobs:
           cache: false
       - name: Build, verify and smoke-test release bundle
         run: |
-          sh -n scripts/install.sh scripts/build-release.sh scripts/make-onefile.sh scripts/asset-pins.sh scripts/smoke-docker.sh
+          sh -n scripts/install.sh scripts/source-version-retention.sh scripts/build-release.sh scripts/make-onefile.sh scripts/asset-pins.sh scripts/smoke-docker.sh
           python3 -m unittest discover -s tests -v
           (cd packaging/launcher && go test ./...)
           sh scripts/build-release.sh

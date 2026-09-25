@@ -1,0 +1,30 @@
+{
+  "observed_at": "2026-09-25",
+  "purpose": "Read-only BuildKit cache check for the local default Docker context; no build, builder creation, prune, model call, or filesystem apply.",
+  "docker_context": "default",
+  "docker_engine_version": "29.1.3",
+  "buildx_cli": {
+    "version": "0.37.1",
+    "sha256_verified": "9447199cdb435f25880548343c128a4b6650e8891ee598905d8d29d39a8e359b",
+    "installed_system_wide": false,
+    "temporary_config_removed": true
+  },
+  "builder_listing": {
+    "command": "docker buildx ls --format '{{json .}}'",
+    "exit_code": 0,
+    "rows_returned": 2,
+    "reported_driver": "docker"
+  },
+  "disk_usage": {
+    "command": "docker buildx du --timeout 20s --format json",
+    "exit_code": 0,
+    "stdout_bytes": 0,
+    "records_returned": 0,
+    "listed_cache_bytes": 0,
+    "reclaimable_not_shared_records": 0,
+    "interpretation": "No records reported for the selected default builder; this does not cover other contexts or builders."
+  },
+  "model_inference": false,
+  "filesystem_apply": false,
+  "engine_mutation": false
+}

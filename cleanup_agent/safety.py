@@ -32,7 +32,8 @@ MOUNTINFO_PATH = Path("/proc/self/mountinfo")
 CONTAINER_MARKER_PATHS = (Path("/.dockerenv"), Path("/run/.containerenv"))
 MAX_MOUNTINFO_BYTES = 1024 * 1024
 OPTIONAL_CONSUMER_CHECKS = ("docker_mounts", "pm2_processes", "systemd_units",
-                            "cron_jobs", "git_state", "literal_code_refs")
+                            "cron_jobs", "git_state", "literal_code_refs",
+                            "service_configs")
 SUPPORTED_CONSUMER_CHECKS = ("processes", "mounts", *OPTIONAL_CONSUMER_CHECKS)
 REQUIRED_CONSUMER_CHECKS = SUPPORTED_CONSUMER_CHECKS
 

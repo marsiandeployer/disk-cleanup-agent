@@ -27,7 +27,7 @@ jobs:
           go-version: 1.27.1
           cache: false
       - name: Check shell syntax
-        run: sh -n scripts/install.sh scripts/build-release.sh scripts/make-onefile.sh scripts/asset-pins.sh scripts/smoke-docker.sh
+        run: sh -n scripts/install.sh scripts/source-version-retention.sh scripts/build-release.sh scripts/make-onefile.sh scripts/asset-pins.sh scripts/smoke-docker.sh
       - name: Run launcher unit tests
         working-directory: packaging/launcher
         run: go test ./...

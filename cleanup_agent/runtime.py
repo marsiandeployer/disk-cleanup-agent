@@ -59,7 +59,8 @@ class OpenCodeRuntime:
         llama_server_bin: str | os.PathLike[str] | None = None,
         model_path: str | os.PathLike[str] | None = None,
         runtime_dir: str | os.PathLike[str] | None = None,
-        context_size: int = 4096,
+        runtime_mode: str = "opencode",
+        context_size: int = 8192,
         threads: int | None = None,
         startup_timeout: float = 45.0,
         request_timeout: float = 120.0,
@@ -78,7 +79,15 @@ class OpenCodeRuntime:
             if transport == "stdio":
                 raise RuntimeUnavailable("stdio transport is not yet supported by the bundled runtime")
             raise RuntimeUnavailable(f"unsupported local model transport: {transport}")
-        self.opencode_bin = self._resolve_executable(opencode_bin, "OPENCODE_BIN", "opencode")
+        if runtime_mode not in {"opencode", "llama"}:
+            raise ValueError("runtime_mode must be 'opencode' or 'llama'")
+        self.runtime_mode = runtime_mode
+        # The llama mode is an explicit, separate path. It must work on hosts
+        # where OpenCode is absent, and never silently switch from OpenCode.
+        self.opencode_bin = (
+            self._resolve_executable(opencode_bin, "OPENCODE_BIN", "opencode")
+            if runtime_mode == "opencode" else None
+        )
         self.llama_server_bin = self._resolve_executable(llama_server_bin, "LLAMA_SERVER_BIN", "llama-server")
         model = model_path or os.environ.get("CLEANUP_AGENT_MODEL_PATH")
         if not model:
@@ -118,7 +127,7 @@ class OpenCodeRuntime:
                 "No partial scan was sent to the model."
             )
 
-        work_root = Path(tempfile.mkdtemp(prefix="disk-cleanup-opencode-", dir=self.runtime_base))
+        work_root = Path(tempfile.mkdtemp(prefix="disk-cleanup-runtime-", dir=self.runtime_base))
         os.chmod(work_root, 0o700)
         guard = _SignalGuard()
         guard.install()
@@ -128,15 +137,16 @@ class OpenCodeRuntime:
         registry: _ChildRegistry | None = None
         try:
             registry = _ChildRegistry(Path(registry_file))
-            work_dir = work_root / "work"
-            work_dir.mkdir(mode=0o700)
-            config_home = work_root / "config"
-            cache_home = work_root / "cache"
-            state_home = work_root / "state"
-            data_home = work_root / "data"
-            home = work_root / "home"
-            for directory in (config_home, cache_home, state_home, data_home, home):
-                directory.mkdir(mode=0o700)
+            if self.runtime_mode == "opencode":
+                work_dir = work_root / "work"
+                work_dir.mkdir(mode=0o700)
+                config_home = work_root / "config"
+                cache_home = work_root / "cache"
+                state_home = work_root / "state"
+                data_home = work_root / "data"
+                home = work_root / "home"
+                for directory in (config_home, cache_home, state_home, data_home, home):
+                    directory.mkdir(mode=0o700)
 
             port = self._free_loopback_port()
             server_url = f"http://127.0.0.1:{port}/v1"
@@ -160,6 +170,8 @@ class OpenCodeRuntime:
             server_log.start(server.stdout)
             try:
                 self._wait_for_server(server, server_log)
+                if self.runtime_mode == "llama":
+                    return self._direct_request(server_url, prompt, response_schema)
                 config = self._opencode_config(
                     server_url, self.context_size, self.request_timeout,
                     response_schema=response_schema,
@@ -259,6 +271,9 @@ class OpenCodeRuntime:
                 return text.strip()
             finally:
                 self._stop_and_forget(server, registry)
+                server_log.join()
+                if server.stdout is not None:
+                    server.stdout.close()
                 if server_log.tail():
                     # Retain server diagnostics only in the exception path;
                     # keeping them out of normal output avoids noisy reports.
@@ -302,6 +317,82 @@ class OpenCodeRuntime:
             # output budget on hidden reasoning tokens.
             "--reasoning", "off",
         ]
+
+    def _direct_request(
+        self, server_url: str, prompt: str,
+        response_schema: Mapping[str, object] | None,
+    ) -> str:
+        """Call llama.cpp's local Chat Completions endpoint without OpenCode.
+
+        This is opt-in via `--runtime llama`; the caller applies exactly the
+        same strict response parser and safety checks as the OpenCode route.
+        There is no retry or backend fallback.
+        """
+        body: dict[str, object] = {
+            "model": "cleanup-model",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "max_tokens": 1024,
+            "stream": False,
+        }
+        if response_schema is not None:
+            body["response_format"] = {
+                "type": "json_schema",
+                # llama.cpp b11160 reads response_format.json_schema.schema
+                # for type=json_schema. A top-level response_format.schema is
+                # only recognized with type=json_object and is otherwise
+                # silently ignored by that pinned server version.
+                "json_schema": {
+                    "name": "cleanup_plan",
+                    "strict": True,
+                    "schema": dict(response_schema),
+                },
+            }
+        encoded = json.dumps(body, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        if len(encoded) > self.max_prompt_chars * 8:
+            raise RuntimeFailure("direct llama request exceeded the bounded request size")
+        request = urllib.request.Request(
+            server_url.rstrip("/") + "/chat/completions",
+            data=encoded,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            with opener.open(request, timeout=self.request_timeout) as response:
+                if response.status != 200:
+                    raise RuntimeFailure(f"local llama endpoint returned HTTP {response.status}")
+                raw = response.read(2_000_001)
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = _redact_diagnostic(exc.read(4096).decode("utf-8", errors="replace"),
+                                            [str(self.runtime_base), str(self.model_path)], 300)
+            except OSError:
+                detail = "(error body unavailable)"
+            raise RuntimeFailure(f"local llama endpoint returned HTTP {exc.code}: {detail}") from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            if isinstance(exc, TimeoutError) or isinstance(getattr(exc, "reason", None), TimeoutError):
+                raise RuntimeTimeout(f"direct llama request exceeded {self.request_timeout:g}s") from exc
+            raise RuntimeFailure(f"direct llama request failed: {type(exc).__name__}") from exc
+        if len(raw) > 2_000_000:
+            raise RuntimeFailure("direct llama response exceeded its bounded capture; no plan was accepted")
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeFailure("direct llama endpoint returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeFailure("direct llama endpoint returned an invalid response object")
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            raise RuntimeFailure("direct llama endpoint returned no completion choice")
+        choice = choices[0]
+        if choice.get("finish_reason") == "length":
+            raise RuntimeFailure("direct llama response reached its output limit; no plan was accepted")
+        message = choice.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeFailure("direct llama endpoint returned no assistant text")
+        return content.strip()
 
     def _wait_for_server(self, process: subprocess.Popen[str], logs: "_BoundedPipe") -> None:
         deadline = time.monotonic() + self.startup_timeout
@@ -356,7 +447,13 @@ class OpenCodeRuntime:
             # A provider-level extraBody is ignored by the pinned bundled SDK.
             model_options["response_format"] = {
                 "type": "json_schema",
-                "schema": dict(response_schema),
+                # llama.cpp b11160 reads the schema from the OpenAI
+                # json_schema wrapper; the unwrapped schema is ignored.
+                "json_schema": {
+                    "name": "cleanup_plan",
+                    "strict": True,
+                    "schema": dict(response_schema),
+                },
             }
         return {
             "$schema": "https://opencode.ai/config.json",
@@ -448,9 +545,26 @@ class OpenCodeRuntime:
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if not isinstance(event, dict) or event.get("type") != "text":
+            if not isinstance(event, dict):
                 continue
             part = event.get("part")
+            # OpenCode's JSON event stream carries completion metadata on the
+            # step-finish event. Do not return partial assistant text when the
+            # provider reports that its output token limit was reached.
+            # Keep the error fixed and path-free; the model text and metadata
+            # may contain sensitive paths or prompt content.
+            event_type = event.get("type")
+            part_type = part.get("type") if isinstance(part, dict) else None
+            if event_type in ("step_finish", "step-finish") or part_type in ("step_finish", "step-finish"):
+                reasons = [event.get("finish_reason"), event.get("finishReason")]
+                if isinstance(part, dict):
+                    reasons.extend((part.get("finish_reason"), part.get("finishReason"), part.get("reason")))
+                if "length" in reasons:
+                    raise RuntimeFailure(
+                        "OpenCode completion was truncated at the output limit; no plan was accepted"
+                    )
+            if event_type != "text":
+                continue
             if isinstance(part, dict) and isinstance(part.get("text"), str):
                 parts.append(part["text"])
         return "".join(parts)
@@ -512,7 +626,7 @@ class OpenCodeRuntime:
         redactions = [
             str(work_root),
             str(self.runtime_base),
-            self.opencode_bin,
+            self.opencode_bin or "",
             self.llama_server_bin,
             str(self.model_path),
         ]
@@ -803,6 +917,10 @@ class _BoundedPipe:
 
         self._thread = threading.Thread(target=drain, name="llama-log-drain", daemon=True)
         self._thread.start()
+
+    def join(self, timeout: float | None = 1.0) -> None:
+        if self._thread is not None:
+            self._thread.join(timeout)
 
     def tail(self) -> str:
         with self._lock:

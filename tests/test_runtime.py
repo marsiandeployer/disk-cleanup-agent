@@ -12,19 +12,197 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from cleanup_agent.runtime import OpenCodeRuntime, RuntimeUnavailable, _ChildRegistry
+from cleanup_agent.runtime import OpenCodeRuntime, RuntimeFailure, RuntimeUnavailable, _ChildRegistry
 
 
 class OpenCodeRuntimeTests(unittest.TestCase):
+    def test_direct_mode_does_not_require_or_resolve_opencode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            model = Path(temp) / "model.gguf"
+            model.write_bytes(b"fixture")
+            runtime = OpenCodeRuntime(
+                runtime_mode="llama", opencode_bin="/missing/opencode",
+                llama_server_bin=sys.executable, model_path=model, runtime_dir=temp,
+            )
+            self.assertEqual(runtime.runtime_mode, "llama")
+            self.assertIsNone(runtime.opencode_bin)
+            with self.assertRaisesRegex(ValueError, "runtime_mode"):
+                OpenCodeRuntime(runtime_mode="automatic")
+
+    def test_direct_request_sends_schema_to_numeric_local_endpoint(self) -> None:
+        captured: list[dict[str, object]] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                captured.append(json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0")))))
+                content = '{"items":[],"inspect_refs":[],"limitations":[]}'
+                encoded = json.dumps({"choices": [{"finish_reason": "stop",
+                                                    "message": {"content": content}}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            runtime = object.__new__(OpenCodeRuntime)
+            runtime.runtime_base = Path("/tmp")
+            runtime.model_path = Path("/private/model.gguf")
+            runtime.request_timeout = 2.0
+            runtime.max_prompt_chars = 1000
+            schema = {"type": "object", "required": ["items", "inspect_refs", "limitations"]}
+            with patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy.invalid", "HTTP_PROXY": "http://proxy.invalid"}):
+                text = runtime._direct_request(
+                    f"http://127.0.0.1:{server.server_address[1]}/v1", "Return JSON only.", schema
+                )
+            self.assertEqual(text, '{"items":[],"inspect_refs":[],"limitations":[]}')
+            self.assertEqual(len(captured), 1)
+            self.assertEqual(captured[0]["response_format"], {
+                "type": "json_schema",
+                "json_schema": {"name": "cleanup_plan", "strict": True, "schema": schema},
+            })
+            self.assertEqual(captured[0]["messages"], [{"role": "user", "content": "Return JSON only."}])
+            self.assertEqual(captured[0]["max_tokens"], 1024)
+            self.assertIs(captured[0]["stream"], False)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+
+    def test_direct_runtime_stops_owned_server_and_removes_registry(self) -> None:
+        class FakeDirectRuntime(OpenCodeRuntime):
+            def _llama_command(self, port: int) -> list[str]:
+                script = '''
+import http.server, json, os, sys
+port = int(sys.argv[1])
+pid_file = sys.argv[2]
+open(pid_file, "w").write(str(os.getpid()))
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        payload = json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": "{\\"value\\":1}"}}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+    def log_message(self, *_args):
+        pass
+http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+'''
+                return [sys.executable, "-c", script, str(port), str(self.pid_file)]
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            model = root / "model.gguf"
+            model.write_bytes(b"fixture")
+            pid_file = root / "server.pid"
+            runtime = FakeDirectRuntime(
+                runtime_mode="llama", opencode_bin="/missing/opencode",
+                llama_server_bin=sys.executable, model_path=model, runtime_dir=root,
+                context_size=4096, threads=1, startup_timeout=5, request_timeout=5,
+            )
+            runtime.pid_file = pid_file
+            result = runtime.generate("Return JSON only.", response_schema={"type": "object"})
+            self.assertEqual(result, '{"value":1}')
+            self.assertTrue(pid_file.exists())
+            server_pid = int(pid_file.read_text())
+            self.assertFalse(Path(f"/proc/{server_pid}").exists())
+            self.assertEqual(list(root.glob("children-*.json")), [])
+
+    def test_direct_mode_fails_explicitly_when_loopback_is_denied(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            model = Path(temp) / "model.gguf"
+            model.write_bytes(b"fixture")
+            runtime = OpenCodeRuntime(
+                runtime_mode="llama", opencode_bin="/missing/opencode",
+                llama_server_bin=sys.executable, model_path=model, runtime_dir=temp,
+            )
+            with patch.object(OpenCodeRuntime, "_free_loopback_port",
+                              side_effect=RuntimeUnavailable("loopback denied")):
+                with self.assertRaisesRegex(RuntimeUnavailable, "loopback denied"):
+                    runtime.generate("Return exact JSON.", response_schema={"type": "object"})
+            self.assertEqual(list(Path(temp).glob("children-*.json")), [])
+
+    def test_direct_mode_rejects_length_finish_without_retry(self) -> None:
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                encoded = json.dumps({"choices": [{"finish_reason": "length",
+                                                    "message": {"content": "{}"}}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        server.daemon_threads = True
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            runtime = object.__new__(OpenCodeRuntime)
+            runtime.runtime_base = Path("/tmp")
+            runtime.model_path = Path("/private/model.gguf")
+            runtime.request_timeout = 2.0
+            runtime.max_prompt_chars = 1000
+            with self.assertRaisesRegex(RuntimeError, "output limit"):
+                runtime._direct_request(
+                    f"http://127.0.0.1:{server.server_address[1]}/v1", "Return JSON.", None
+                )
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+
     def test_extracts_only_json_text_events(self) -> None:
         output = "\n".join([
             json.dumps({"type": "step_start", "part": {"type": "step-start"}}),
             json.dumps({"type": "text", "part": {"type": "text", "text": '{"ok":'}}),
             "not-json",
             json.dumps({"type": "text", "part": {"type": "text", "text": "true}"}}),
+            json.dumps({"type": "step_finish", "part": {
+                "type": "step-finish", "reason": "stop",
+                "tokens": {"input": 20, "output": 2},
+            }}),
             json.dumps({"type": "tool", "part": {"text": "must not be used"}}),
         ])
         self.assertEqual(OpenCodeRuntime._extract_text(output), '{"ok":true}')
+
+    def test_step_finish_length_rejects_truncated_text_without_echoing_payload(self) -> None:
+        truncated_text = '{"items":{"candidate": {"reason":"private /srv/data/secret.db'
+        finish_events = [
+            # OpenCode event variants may put the provider finish reason on
+            # the event, the part, or expose it as the step part's reason.
+            {"type": "step_finish", "finish_reason": "length",
+             "part": {"type": "step-finish", "tokens": {"input": 3909, "output": 187}}},
+            {"type": "step_finish", "part": {"type": "step-finish",
+             "finish_reason": "length", "tokens": {"input": 3909, "output": 187}}},
+            {"type": "step_finish", "part": {"type": "step-finish",
+             "reason": "length", "tokens": {"input": 3909, "output": 187}}},
+        ]
+        for finish_event in finish_events:
+            with self.subTest(finish_event=finish_event):
+                events = "\n".join([
+                    json.dumps({"type": "text", "part": {"type": "text", "text": truncated_text}}),
+                    json.dumps(finish_event),
+                ])
+                with self.assertRaisesRegex(RuntimeFailure, "truncated at the output limit") as raised:
+                    OpenCodeRuntime._extract_text(events)
+                self.assertNotIn("/srv/data/secret.db", str(raised.exception))
+                self.assertNotIn(truncated_text, str(raised.exception))
 
     def test_event_summary_and_opt_in_diagnostic_are_bounded_private_and_redacted(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -77,7 +255,9 @@ class OpenCodeRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             constrained["provider"]["local"]["models"]["cleanup-model"]["options"]["response_format"],
-            {"type": "json_schema", "schema": schema},
+            {"type": "json_schema", "json_schema": {
+                "name": "cleanup_plan", "strict": True, "schema": schema,
+            }},
         )
 
     def test_pinned_opencode_sends_response_schema_to_local_endpoint(self) -> None:
@@ -150,7 +330,10 @@ class OpenCodeRuntimeTests(unittest.TestCase):
                 self.assertGreaterEqual(len(captured), 1, result.stdout[-1000:])
                 for path, body in captured:
                     self.assertEqual(path, "/v1/chat/completions")
-                    self.assertEqual(body.get("response_format"), {"type": "json_schema", "schema": schema})
+                    self.assertEqual(body.get("response_format"), {
+                        "type": "json_schema",
+                        "json_schema": {"name": "cleanup_plan", "strict": True, "schema": schema},
+                    })
                     self.assertNotIn("extraBody", body)
                     self.assertIs(body.get("stream"), True)
         finally:

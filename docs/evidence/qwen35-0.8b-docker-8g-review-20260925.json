@@ -1,0 +1,92 @@
+{
+  "format": "disk-cleanup-agent-model-evaluation-v1",
+  "date": "2026-09-25",
+  "model": "Qwen3.5-0.8B-Q4_K_M",
+  "model_sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+  "runtime": {
+    "opencode": "1.14.21",
+    "llama_cpp": "b11160",
+    "artifact_sha256": "ecf904b62a1591cfb0d0e6a93a131692b7bbd695740c6a7c8110beedd68630ed",
+    "final_release_build_sha256": "9e014497f0bacbb5f4b98a71060afa5b4af0c5ef178a5e6ee0443126c4a2c875",
+    "container_image": "ubuntu:22.04",
+    "container_image_id": "sha256:bf7f4568d95723d2148bb19c688526d1404ef3302ef024bc1513ad8f533d46c8",
+    "memory_limit_bytes": 8589934592,
+    "memory_swap_limit_bytes": 8589934592,
+    "cpus": 2,
+    "network": "none",
+    "uid": 65534,
+    "response_schema": "object keyed by candidate ID",
+    "context_size_tokens": 8192,
+    "max_model_candidates": 5
+  },
+  "fixture": {
+    "candidate_count": 3,
+    "allocated_bytes": 220205056,
+    "age_days": 45,
+    "share_sanitized_name_hints": true,
+    "files": [
+      "mysql-data-volume.ibd",
+      "php-session-data.bin",
+      "qa-expired-render-cache.bin"
+    ]
+  },
+  "onefile_cli_run": {
+    "scan_status": "complete",
+    "plan_status": "complete",
+    "parsed": true,
+    "assessments": {
+      "candidate_for_review": 0,
+      "keep": 0,
+      "unknown": 3
+    },
+    "deletion_authorized": false,
+    "apply_invoked": false,
+    "all_fixture_files_remained": true,
+    "oom_killed": false,
+    "oom_events": 0,
+    "memory_peak_available": false
+  },
+  "refined_prompt_source_cli_run": {
+    "cli_source": "read-only repository mount",
+    "bundled_model_and_runtimes": true,
+    "plan_status": "partial",
+    "parsed": true,
+    "assessments": {
+      "candidate_for_review": 0,
+      "keep": 0,
+      "unknown": 3
+    },
+    "deletion_authorized": false,
+    "apply_invoked": false,
+    "all_fixture_files_remained": true,
+    "oom_killed": false,
+    "oom_events": 0,
+    "limitations": [
+      "evidence_refs are only known for the three supplied candidate IDs",
+      "unknown optional consumer searches remain unknown",
+      "scanner capabilities may be restricted in a container"
+    ],
+    "memory_peak_available": false
+  },
+  "three_preinspection_followup": {
+    "preinspected_candidates": 3,
+    "plan_created": false,
+    "cli_exit_code": 1,
+    "error": "model returned invalid JSON; no plan was written",
+    "apply_invoked": false,
+    "fixture_files_deleted": false,
+    "oom_killed": false,
+    "oom_events": 0,
+    "observed_docker_stats_sample_mib": 827.1,
+    "memory_peak_available": false
+  },
+  "assessment": {
+    "useful_human_review_candidates": 0,
+    "unsafe_delete_recommendations": 0,
+    "php_session_preserved": true,
+    "mysql_data_preserved": true,
+    "qa_cache_recommended_for_review": false,
+    "criterion_good_recommendations_exceed_bad_recommendations": false,
+    "conclusion": "The model/runtime completed under the 8 GiB container limit, but the small model still produced no useful cleanup review candidates."
+  }
+}

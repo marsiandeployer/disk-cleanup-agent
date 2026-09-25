@@ -80,6 +80,12 @@ export DISKCLEANUP_RUNTIME_DIR="$runtime"
 dd if=/dev/zero of=/scratch/input/qa-probe.bin bs=1M count=65 status=none
 /usr/local/bin/disk-cleanup-agent scan /scratch/input --output /scratch/scan.json --max-entries 100
 /usr/local/bin/disk-cleanup-agent report /scratch/scan.json >/scratch/report.txt
+set +e
+/usr/local/bin/disk-cleanup-agent scan /host-root --output /scratch/host-scan.json --max-entries 100
+host_scan_status=$?
+set -e
+case "$host_scan_status" in 0|2) ;; *) exit "$host_scan_status" ;; esac
+printf "%s\n" "$host_scan_status" >/scratch/host-scan-status.txt
 python=
 for candidate in "$runtime"/bundle-*/python/bin/python3 "$runtime"/bundle-*/python/bin/python3.12; do
   if [ -x "$candidate" ]; then python=$candidate; break; fi
@@ -111,6 +117,7 @@ PY
 test -s /scratch/doctor.json
 test -s /scratch/scan.json
 test -s /scratch/report.txt
+test -s /scratch/host-scan.json
 test -s /scratch/plan.json
 test -f /scratch/input/qa-probe.bin
 test -f /scratch/input/probe.txt'
@@ -122,6 +129,7 @@ container_id=$(docker create \
   --user "$uid:$gid" \
   --mount "type=bind,src=$ASSET,dst=/usr/local/bin/disk-cleanup-agent,readonly" \
   --mount "type=bind,src=$scratch,dst=/scratch" \
+  --mount "type=bind,src=/,dst=/host-root,readonly" \
   --env HOME=/scratch/home \
   "$IMAGE" sh -c "$container_command") || die 'could not create the disposable Docker acceptance container'
 mounts=$(docker inspect --format '{{json .Mounts}}' "$container_id") || die 'cannot inspect acceptance container mounts'
@@ -134,6 +142,7 @@ mounts = json.loads(sys.argv[1])
 expected = {
     (str(pathlib.Path(sys.argv[2]).resolve()), "/usr/local/bin/disk-cleanup-agent", True),
     (str(pathlib.Path(sys.argv[3]).resolve()), "/scratch", False),
+    (str(pathlib.Path("/").resolve()), "/host-root", True),
 }
 observed = {(item["Source"], item["Destination"], not item["RW"]) for item in mounts}
 assert observed == expected, f"unexpected container visibility mounts: {observed!r}"
@@ -144,7 +153,8 @@ status=$(docker inspect --format '{{.State.Status}}' "$container_id") || die 'ca
 [ "$status" = exited ] || die "acceptance container ended in unexpected state: $status"
 [ -f "$scratch/input/qa-probe.bin" ] || die 'scan or manual-plan changed the disposable QA file'
 [ -f "$scratch/input/probe.txt" ] || die 'scan or manual-plan changed the control fixture'
-python3 - "$scratch/doctor.json" "$scratch/scan.json" "$scratch/report.txt" "$scratch/plan.json" <<'PY'
+python3 - "$scratch/doctor.json" "$scratch/scan.json" "$scratch/report.txt" \
+  "$scratch/plan.json" "$scratch/host-scan.json" "$scratch/host-scan-status.txt" <<'PY'
 import json
 import pathlib
 import sys
@@ -153,6 +163,9 @@ doctor = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 scan = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
 report = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
 plan = json.loads(pathlib.Path(sys.argv[4]).read_text(encoding="utf-8"))
+host_scan = json.loads(pathlib.Path(sys.argv[5]).read_text(encoding="utf-8"))
+host_scan_status = int(pathlib.Path(sys.argv[6]).read_text(encoding="ascii"))
+backup_note = "Перед началом очистки сделайте резервную копию через панель управления хостингом. Утилита не создаёт и не проверяет её."
 assert doctor["bundled_mode"] is True
 assert doctor["model"]["present"] is True
 assert doctor["service_manager_required"] is False
@@ -161,10 +174,19 @@ assert doctor["loopback_bind"] == "available"
 assert scan["scan"]["root"] == "/scratch/input"
 assert scan["scan"]["status"] == "complete"
 assert scan["scan"]["totals"]["files"] == 2
+assert scan["scan"]["storage"]["docker"]["status"] == "unknown"
 assert report["root"] == "/scratch/input"
 assert report["deletion_performed"] is False
+assert report["storage"]["docker"] == scan["scan"]["storage"]["docker"]
+assert report["backup_recommendation"] == backup_note
 assert any(item.get("path") == "/scratch/input/qa-probe.bin" for item in scan["scan"]["candidates"])
 assert plan["planning_mode"] == "manual_config"
+assert plan["backup_recommendation"] == backup_note
 assert len([item for item in plan["items"] if item["path"] == "/scratch/input/qa-probe.bin"]) == 1
+assert host_scan["scan"]["root"] == "/host-root"
+assert host_scan["scan"]["status"] in {"complete", "partial"}
+assert host_scan["scan"]["totals"]["entries"] <= 100
+assert host_scan["scan"]["storage"]["docker"]["status"] == "unknown"
+assert host_scan_status == (0 if host_scan["scan"]["status"] == "complete" else 2)
 PY
-printf 'Docker smoke passed: doctor, scan, report and manual-plan ran as UID %s in Ubuntu 22.04; only the executable and disposable scratch are mounted, and scan data remained unchanged.\n' "$uid"
+printf 'Docker smoke passed: doctor, scan, report and manual-plan ran as UID %s in Ubuntu 22.04; the real host root was read-only, Docker Engine absence was explicit, and the writable scratch fixture remained unchanged.\n' "$uid"

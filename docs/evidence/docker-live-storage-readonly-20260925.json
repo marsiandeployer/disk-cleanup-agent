@@ -1,0 +1,51 @@
+{
+  "observed_at": "2026-09-25",
+  "purpose": "Read-only validation of the Docker storage adapter against the local Docker Engine; no model call or mutation.",
+  "context": "default",
+  "endpoint_kind": "unix",
+  "engine_version": "29.1.3",
+  "api_version": "1.52",
+  "storage_status": "unknown",
+  "additivity": "non_additive",
+  "categories": {
+    "images": {
+      "status": "available",
+      "item_count": 10,
+      "engine_reported_size_bytes": 4205825064,
+      "unknown_count": 0
+    },
+    "containers": {
+      "status": "unknown",
+      "item_count": 13,
+      "engine_reported_size_bytes": 179139385,
+      "unknown_count": 2
+    },
+    "local_volumes": {
+      "status": "available",
+      "item_count": 6,
+      "engine_reported_size_bytes": 3689571972,
+      "unknown_count": 0
+    },
+    "build_cache": {
+      "status": "unknown",
+      "item_count": null,
+      "engine_reported_size_bytes": null,
+      "unknown_count": null,
+      "reason": "missing_or_incomplete_summary"
+    }
+  },
+  "unknown_categories": ["containers", "build_cache"],
+  "eligible_build_cache_objects": 0,
+  "model_projection": {
+    "object_limit": 5,
+    "objects_sent": 5,
+    "categories_sent": ["images", "local_volumes"],
+    "omitted_count_unknown": 22,
+    "unbound_unknown_count": 2,
+    "schema_bound_object_count": 5,
+    "engine_identity_exposed_to_model": false
+  },
+  "buildx_cli_available": false,
+  "model_inference": false,
+  "filesystem_apply": false
+}
